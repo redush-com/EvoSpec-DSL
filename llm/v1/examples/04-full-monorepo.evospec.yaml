@@ -1,0 +1,544 @@
+# EvoSpec DSL v1 — Full Monorepo Example
+# Complete example with all features: domain, generation, history, migrations
+
+spec: evospec/v1
+
+project:
+  id: acme.evoapp
+  name: "ACME EvoApp"
+  versioning:
+    strategy: semver
+    current: "1.1.0"
+    compatibility:
+      data: forward-only
+      api: no-breaking-in-minor
+      processes: instance-pinned
+
+structure:
+  root: NodeRef(system.root)
+
+domain:
+  nodes:
+    # ============================================
+    # SYSTEM & MODULES
+    # ============================================
+    
+    - kind: System
+      id: system.root
+      meta:
+        title: "ACME System"
+        description: "Full-featured e-commerce platform"
+      spec:
+        goals:
+          - "Spec-guided evolution"
+          - "Any-stack compatible"
+          - "Full audit trail"
+      children:
+        - NodeRef(mod.sales)
+        - NodeRef(mod.workflow)
+        - NodeRef(mod.interfaces)
+
+    - kind: Module
+      id: mod.sales
+      meta:
+        title: "Sales Domain"
+      spec: {}
+      children:
+        - NodeRef(entity.customer)
+        - NodeRef(entity.order)
+        - NodeRef(entity.order_item)
+        - NodeRef(enum.order_status)
+        - NodeRef(cmd.order.create)
+        - NodeRef(cmd.order.submit)
+        - NodeRef(cmd.order.cancel)
+        - NodeRef(evt.order.created)
+        - NodeRef(evt.order.submitted)
+        - NodeRef(evt.order.cancelled)
+
+    - kind: Module
+      id: mod.workflow
+      meta:
+        title: "Workflow"
+      spec: {}
+      children:
+        - NodeRef(proc.order.fulfillment)
+        - NodeRef(step.validate)
+        - NodeRef(step.pay)
+        - NodeRef(step.ship)
+
+    - kind: Module
+      id: mod.interfaces
+      meta:
+        title: "Interfaces"
+      spec: {}
+      children:
+        - NodeRef(iface.http)
+        - NodeRef(iface.events)
+
+    # ============================================
+    # ENUMS
+    # ============================================
+
+    - kind: Enum
+      id: enum.order_status
+      meta:
+        title: "Order Status"
+      spec:
+        values:
+          - "draft"
+          - "submitted"
+          - "paid"
+          - "shipped"
+          - "delivered"
+          - "cancelled"
+
+    # ============================================
+    # ENTITIES
+    # ============================================
+
+    - kind: Entity
+      id: entity.customer
+      meta:
+        title: "Customer"
+        tags: ["core", "sales"]
+      spec:
+        fields:
+          id:
+            type: uuid
+            required: true
+          name:
+            type: string
+            required: true
+          email:
+            type: string
+            required: true
+          phone:
+            type: string
+            required: false
+            description: "Added in v1.1.0"
+      contracts:
+        - invariant: "name != ''"
+          level: hard
+
+    - kind: Entity
+      id: entity.order
+      meta:
+        title: "Order"
+        tags: ["core", "sales"]
+      spec:
+        fields:
+          id:
+            type: uuid
+            required: true
+          customerId:
+            type: ref(entity.customer)
+            required: true
+          status:
+            type: enum(OrderStatus)
+            required: true
+            default: "draft"
+          totalCents:
+            type: int
+            required: true
+            default: 0
+          createdAt:
+            type: datetime
+            required: true
+          submittedAt:
+            type: datetime
+            required: false
+        relations:
+          customer:
+            to: entity.customer
+            type: many-to-one
+          items:
+            to: entity.order_item
+            type: one-to-many
+      contracts:
+        - invariant: "totalCents >= 0"
+          level: hard
+
+    - kind: Entity
+      id: entity.order_item
+      meta:
+        title: "Order Item"
+      spec:
+        fields:
+          id:
+            type: uuid
+            required: true
+          orderId:
+            type: ref(entity.order)
+            required: true
+          productId:
+            type: uuid
+            required: true
+          quantity:
+            type: int
+            required: true
+          unitPriceCents:
+            type: int
+            required: true
+      contracts:
+        - invariant: "quantity > 0"
+        - invariant: "unitPriceCents >= 0"
+
+    # ============================================
+    # COMMANDS
+    # ============================================
+
+    - kind: Command
+      id: cmd.order.create
+      meta:
+        title: "Create Order"
+      spec:
+        input:
+          customerId: uuid
+        output:
+          orderId: uuid
+        effects:
+          emits:
+            - evt.order.created
+          modifies:
+            - entity.order
+
+    - kind: Command
+      id: cmd.order.submit
+      meta:
+        title: "Submit Order"
+      spec:
+        input:
+          orderId: uuid
+        effects:
+          emits:
+            - evt.order.submitted
+          modifies:
+            - entity.order
+
+    - kind: Command
+      id: cmd.order.cancel
+      meta:
+        title: "Cancel Order"
+      spec:
+        input:
+          orderId: uuid
+          reason: string
+        effects:
+          emits:
+            - evt.order.cancelled
+          modifies:
+            - entity.order
+
+    # ============================================
+    # EVENTS
+    # ============================================
+
+    - kind: Event
+      id: evt.order.created
+      spec:
+        payload:
+          orderId: uuid
+          customerId: uuid
+          occurredAt: datetime
+
+    - kind: Event
+      id: evt.order.submitted
+      spec:
+        payload:
+          orderId: uuid
+          totalCents: int
+          occurredAt: datetime
+
+    - kind: Event
+      id: evt.order.cancelled
+      spec:
+        payload:
+          orderId: uuid
+          reason: string
+          occurredAt: datetime
+
+    # ============================================
+    # PROCESS & STEPS
+    # ============================================
+
+    - kind: Process
+      id: proc.order.fulfillment
+      meta:
+        title: "Order Fulfillment"
+        description: "Handles order from submission to delivery"
+      spec:
+        trigger: cmd.order.submit
+        state:
+          vars:
+            orderId: uuid
+            validated: bool
+            paid: bool
+            shipped: bool
+      children:
+        - NodeRef(step.validate)
+        - NodeRef(step.pay)
+        - NodeRef(step.ship)
+      contracts:
+        - temporal: "G(step.ship -> paid)"
+          level: hard
+        - temporal: "G(step.pay -> validated)"
+          level: hard
+
+    - kind: Step
+      id: step.validate
+      meta:
+        title: "Validate Order"
+      spec:
+        action: "ValidateOrder"
+        inputs:
+          orderId: uuid
+        outputs:
+          validated: bool
+
+    - kind: Step
+      id: step.pay
+      meta:
+        title: "Process Payment"
+      spec:
+        action: "ProcessPayment"
+        inputs:
+          orderId: uuid
+        outputs:
+          paid: bool
+          transactionId: string
+
+    - kind: Step
+      id: step.ship
+      meta:
+        title: "Ship Order"
+      spec:
+        action: "CreateShipment"
+        inputs:
+          orderId: uuid
+        outputs:
+          shipped: bool
+          trackingNumber: string
+
+    # ============================================
+    # INTERFACES
+    # ============================================
+
+    - kind: Interface
+      id: iface.http
+      meta:
+        title: "HTTP API"
+      spec:
+        style: openapi
+        exposes:
+          commands:
+            - cmd.order.create
+            - cmd.order.submit
+            - cmd.order.cancel
+          queries: []
+      contracts:
+        - type: api-compatibility
+          rule: "minor cannot remove response fields"
+          level: hard
+
+    - kind: Interface
+      id: iface.events
+      meta:
+        title: "Event Bus"
+      spec:
+        style: async
+        exposes:
+          events:
+            - evt.order.created
+            - evt.order.submitted
+            - evt.order.cancelled
+
+    # ============================================
+    # SCENARIOS
+    # ============================================
+
+    - kind: Scenario
+      id: sc.order.happy_path
+      meta:
+        title: "Order Happy Path"
+      spec:
+        given:
+          - seed:
+              entity: entity.customer
+              data:
+                name: "Buyer"
+                email: "buyer@example.com"
+          - seed:
+              entity: entity.order
+              data:
+                customerId: "$ref(customer).id"
+                status: "draft"
+                totalCents: 10000
+        when:
+          - command:
+              id: cmd.order.submit
+              input:
+                orderId: "$ref(order).id"
+        then:
+          - expectEvent:
+              id: evt.order.submitted
+              match:
+                orderId: "$ref(order).id"
+          - expectEntity:
+              id: entity.order
+              where:
+                id: "$ref(order).id"
+              match:
+                status: "submitted"
+
+    - kind: Scenario
+      id: sc.order.cancellation
+      meta:
+        title: "Order Cancellation"
+      spec:
+        given:
+          - seed:
+              entity: entity.customer
+              data:
+                name: "Buyer"
+          - seed:
+              entity: entity.order
+              data:
+                customerId: "$ref(customer).id"
+                status: "submitted"
+        when:
+          - command:
+              id: cmd.order.cancel
+              input:
+                orderId: "$ref(order).id"
+                reason: "Customer request"
+        then:
+          - expectEvent:
+              id: evt.order.cancelled
+              match:
+                reason: "Customer request"
+          - expectEntity:
+              id: entity.order
+              where:
+                id: "$ref(order).id"
+              match:
+                status: "cancelled"
+
+# ============================================
+# GENERATION
+# ============================================
+
+generation:
+  monorepo:
+    layout:
+      apps:
+        frontend: "apps/frontend"
+        backend: "apps/backend"
+      libs:
+        domain: "libs/domain"
+        infra: "libs/infra"
+
+  zones:
+    - path: "apps/backend/generated/**"
+      mode: overwrite
+    - path: "apps/backend/src/**"
+      mode: anchored
+    - path: "apps/frontend/**"
+      mode: preserve
+    - path: "libs/domain/**"
+      mode: spec-controlled
+
+  hooks:
+    - id: hook.order.pricing
+      location:
+        file: "apps/backend/src/domain/order/pricing.ts"
+        anchorStart: "// <spec:hook id='order.pricing'>"
+        anchorEnd: "// </spec:hook>"
+      contract:
+        signature: "(order: Order) => number"
+        purity: true
+
+    - id: hook.order.validation
+      location:
+        file: "apps/backend/src/domain/order/validation.ts"
+        anchorStart: "// <spec:hook id='order.validation'>"
+        anchorEnd: "// </spec:hook>"
+      contract:
+        signature: "(order: Order) => ValidationResult"
+        purity: true
+
+  pipelines:
+    build:
+      cmd: "pnpm -r build"
+    test:
+      cmd: "pnpm -r test"
+    e2e:
+      cmd: "pnpm -r e2e"
+    migrate:
+      cmd: "pnpm --filter backend migrate"
+    lint:
+      cmd: "pnpm -r lint"
+
+  verification:
+    required:
+      - build
+      - test
+      - migrate
+    optional:
+      - e2e
+      - lint
+
+# ============================================
+# HISTORY & MIGRATIONS
+# ============================================
+
+history:
+  - version: "1.0.0"
+    basedOn: null
+    changes: []
+    migrations: []
+    notes: "Initial spec"
+
+  - version: "1.1.0"
+    basedOn: "1.0.0"
+    changes:
+      - op: add-field
+        target: entity.customer
+        field: phone
+        type: string
+        required: false
+    migrations:
+      - id: mig.1_1_0.customer.phone
+        kind: data
+        steps:
+          - backfill:
+              entity: entity.customer
+              set:
+                phone: ""
+        validate:
+          - assert: "count(customer where phone is null) == 0"
+    notes: "Add optional phone to customer"
+
+# ============================================
+# TESTS & DOCS
+# ============================================
+
+tests:
+  scenarios:
+    - NodeRef(sc.order.happy_path)
+    - NodeRef(sc.order.cancellation)
+
+docs:
+  packs:
+    - id: doc.tech
+      include:
+        domain: true
+        interfaces: true
+        processes: true
+        migrations: true
+    - id: doc.user
+      include:
+        howTo:
+          - "Create an order"
+          - "Submit an order"
+          - "Cancel an order"
+        roles: true

@@ -1,0 +1,699 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evospec.dev/schema/v1/evospec.schema.json",
+  "title": "EvoSpec DSL v1",
+  "description": "Schema for Evolution Software Specification DSL - a language for managed LLM-driven software evolution",
+  "type": "object",
+  "required": ["spec", "project", "structure", "domain"],
+  "properties": {
+    "spec": {
+      "const": "evospec/v1",
+      "description": "DSL version identifier"
+    },
+    "project": {
+      "$ref": "#/$defs/Project"
+    },
+    "structure": {
+      "$ref": "#/$defs/Structure"
+    },
+    "domain": {
+      "$ref": "#/$defs/Domain"
+    },
+    "generation": {
+      "$ref": "#/$defs/Generation"
+    },
+    "history": {
+      "$ref": "#/$defs/History"
+    },
+    "tests": {
+      "$ref": "#/$defs/Tests"
+    },
+    "docs": {
+      "$ref": "#/$defs/Docs"
+    }
+  },
+  "$defs": {
+    "StableId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*$",
+      "description": "Stable identifier: lowercase, starts with letter, allows dots, dashes, underscores"
+    },
+    "NodeRef": {
+      "type": "string",
+      "pattern": "^NodeRef\\([a-z][a-z0-9_.-]*\\)$",
+      "description": "Reference to another node by ID, format: NodeRef(node.id)"
+    },
+    "NodeRefOrInline": {
+      "oneOf": [
+        { "$ref": "#/$defs/NodeRef" },
+        { "$ref": "#/$defs/Node" }
+      ]
+    },
+    "Project": {
+      "type": "object",
+      "required": ["id", "versioning"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/StableId",
+          "description": "Unique project identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable project name"
+        },
+        "versioning": {
+          "type": "object",
+          "required": ["strategy", "current"],
+          "properties": {
+            "strategy": {
+              "enum": ["semver"],
+              "description": "Versioning strategy"
+            },
+            "current": {
+              "type": "string",
+              "pattern": "^\\d+\\.\\d+\\.\\d+$",
+              "description": "Current version (semver format)"
+            },
+            "compatibility": {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "enum": ["forward-only", "bidirectional"],
+                  "description": "Data compatibility mode"
+                },
+                "api": {
+                  "enum": ["no-breaking-in-minor", "breaking-allowed"],
+                  "description": "API compatibility mode"
+                },
+                "processes": {
+                  "enum": ["instance-pinned", "auto-migrate"],
+                  "description": "Process instance compatibility"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Structure": {
+      "type": "object",
+      "required": ["root"],
+      "properties": {
+        "root": {
+          "$ref": "#/$defs/NodeRef",
+          "description": "Reference to root system node"
+        }
+      }
+    },
+    "Domain": {
+      "type": "object",
+      "required": ["nodes"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Node" },
+          "description": "All domain nodes"
+        }
+      }
+    },
+    "Meta": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Human-readable title"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Categorization tags"
+        }
+      }
+    },
+    "Node": {
+      "type": "object",
+      "required": ["kind", "id", "spec"],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/NodeKind",
+          "description": "Type of node"
+        },
+        "id": {
+          "$ref": "#/$defs/StableId",
+          "description": "Stable unique identifier"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta",
+          "description": "Metadata (title, description, tags)"
+        },
+        "spec": {
+          "type": "object",
+          "description": "Node specification (what it is)"
+        },
+        "impl": {
+          "type": "object",
+          "description": "Implementation details (how/where)"
+        },
+        "facets": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Optional extension facets"
+        },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NodeRefOrInline" },
+          "description": "Child nodes (references or inline)"
+        },
+        "contracts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Contract" },
+          "description": "Contracts and invariants"
+        },
+        "hooks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Hook" },
+          "description": "User code hooks"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "Entity" } } },
+          "then": { "properties": { "spec": { "$ref": "#/$defs/EntitySpec" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "Command" } } },
+          "then": { "properties": { "spec": { "$ref": "#/$defs/CommandSpec" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "Event" } } },
+          "then": { "properties": { "spec": { "$ref": "#/$defs/EventSpec" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "Process" } } },
+          "then": { "properties": { "spec": { "$ref": "#/$defs/ProcessSpec" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "Scenario" } } },
+          "then": { "properties": { "spec": { "$ref": "#/$defs/ScenarioSpec" } } }
+        }
+      ]
+    },
+    "NodeKind": {
+      "enum": [
+        "System",
+        "Module",
+        "Entity",
+        "Enum",
+        "Value",
+        "Interface",
+        "Command",
+        "Event",
+        "Query",
+        "Process",
+        "Step",
+        "Policy",
+        "Scenario",
+        "Contract"
+      ],
+      "description": "Available node kinds"
+    },
+    "FieldType": {
+      "type": "string",
+      "description": "Field type: uuid, string, int, bool, datetime, ref(entity.x), enum(EnumName)"
+    },
+    "Field": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/FieldType"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "default": {
+          "description": "Default value"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "EntitySpec": {
+      "type": "object",
+      "required": ["fields"],
+      "properties": {
+        "fields": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/Field" },
+          "description": "Entity fields"
+        },
+        "relations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["to", "type"],
+            "properties": {
+              "to": { "$ref": "#/$defs/StableId" },
+              "type": { "enum": ["one-to-one", "one-to-many", "many-to-one", "many-to-many"] }
+            }
+          },
+          "description": "Entity relations"
+        }
+      }
+    },
+    "CommandSpec": {
+      "type": "object",
+      "required": ["input"],
+      "properties": {
+        "input": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/FieldType" },
+          "description": "Command input parameters"
+        },
+        "output": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/FieldType" },
+          "description": "Command output"
+        },
+        "effects": {
+          "type": "object",
+          "properties": {
+            "emits": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/StableId" },
+              "description": "Events emitted by this command"
+            },
+            "modifies": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/StableId" },
+              "description": "Entities modified by this command"
+            }
+          }
+        }
+      }
+    },
+    "EventSpec": {
+      "type": "object",
+      "required": ["payload"],
+      "properties": {
+        "payload": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/FieldType" },
+          "description": "Event payload fields"
+        }
+      }
+    },
+    "QuerySpec": {
+      "type": "object",
+      "required": ["input", "output"],
+      "properties": {
+        "input": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/FieldType" }
+        },
+        "output": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/FieldType" }
+        }
+      }
+    },
+    "ProcessSpec": {
+      "type": "object",
+      "required": ["trigger"],
+      "properties": {
+        "trigger": {
+          "$ref": "#/$defs/StableId",
+          "description": "Command or event that triggers this process"
+        },
+        "state": {
+          "type": "object",
+          "properties": {
+            "vars": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/$defs/FieldType" },
+              "description": "Process state variables"
+            }
+          }
+        }
+      }
+    },
+    "StepSpec": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Action name"
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/FieldType" }
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/FieldType" }
+        }
+      }
+    },
+    "ScenarioSpec": {
+      "type": "object",
+      "required": ["given", "when", "then"],
+      "properties": {
+        "given": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ScenarioGiven" },
+          "description": "Preconditions"
+        },
+        "when": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ScenarioWhen" },
+          "description": "Actions"
+        },
+        "then": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ScenarioThen" },
+          "description": "Expected outcomes"
+        }
+      }
+    },
+    "ScenarioGiven": {
+      "type": "object",
+      "properties": {
+        "seed": {
+          "type": "object",
+          "required": ["entity", "data"],
+          "properties": {
+            "entity": { "$ref": "#/$defs/StableId" },
+            "data": { "type": "object" }
+          }
+        }
+      }
+    },
+    "ScenarioWhen": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "object",
+          "required": ["id", "input"],
+          "properties": {
+            "id": { "$ref": "#/$defs/StableId" },
+            "input": { "type": "object" }
+          }
+        }
+      }
+    },
+    "ScenarioThen": {
+      "type": "object",
+      "properties": {
+        "expectEvent": {
+          "type": "object",
+          "required": ["id"],
+          "properties": {
+            "id": { "$ref": "#/$defs/StableId" },
+            "match": { "type": "object" }
+          }
+        },
+        "expectEntity": {
+          "type": "object",
+          "required": ["id"],
+          "properties": {
+            "id": { "$ref": "#/$defs/StableId" },
+            "where": { "type": "object" },
+            "match": { "type": "object" }
+          }
+        }
+      }
+    },
+    "Contract": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": ["invariant", "temporal", "api-compatibility", "policy"],
+          "description": "Contract type"
+        },
+        "invariant": {
+          "type": "string",
+          "description": "Invariant expression"
+        },
+        "temporal": {
+          "type": "string",
+          "description": "Temporal logic expression (LTL)"
+        },
+        "rule": {
+          "type": "string",
+          "description": "Rule description"
+        },
+        "level": {
+          "enum": ["hard", "soft"],
+          "default": "hard",
+          "description": "Violation level: hard blocks generation, soft is warning"
+        }
+      }
+    },
+    "Hook": {
+      "type": "object",
+      "required": ["id", "location"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/StableId"
+        },
+        "location": {
+          "type": "object",
+          "required": ["file", "anchorStart", "anchorEnd"],
+          "properties": {
+            "file": { "type": "string" },
+            "anchorStart": { "type": "string" },
+            "anchorEnd": { "type": "string" }
+          }
+        },
+        "contract": {
+          "type": "object",
+          "properties": {
+            "signature": { "type": "string" },
+            "purity": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "Generation": {
+      "type": "object",
+      "properties": {
+        "monorepo": {
+          "$ref": "#/$defs/MonorepoLayout"
+        },
+        "zones": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Zone" }
+        },
+        "hooks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Hook" }
+        },
+        "pipelines": {
+          "$ref": "#/$defs/Pipelines"
+        },
+        "verification": {
+          "type": "object",
+          "properties": {
+            "required": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "optional": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "MonorepoLayout": {
+      "type": "object",
+      "properties": {
+        "layout": {
+          "type": "object",
+          "properties": {
+            "apps": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "libs": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "Zone": {
+      "type": "object",
+      "required": ["path", "mode"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Glob pattern for files"
+        },
+        "mode": {
+          "enum": ["overwrite", "anchored", "preserve", "spec-controlled"],
+          "description": "Generation mode for this zone"
+        }
+      }
+    },
+    "Pipelines": {
+      "type": "object",
+      "properties": {
+        "build": { "$ref": "#/$defs/Pipeline" },
+        "test": { "$ref": "#/$defs/Pipeline" },
+        "e2e": { "$ref": "#/$defs/Pipeline" },
+        "migrate": { "$ref": "#/$defs/Pipeline" },
+        "lint": { "$ref": "#/$defs/Pipeline" }
+      }
+    },
+    "Pipeline": {
+      "type": "object",
+      "required": ["cmd"],
+      "properties": {
+        "cmd": {
+          "type": "string",
+          "description": "Command to execute"
+        }
+      }
+    },
+    "History": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/HistoryEntry" }
+    },
+    "HistoryEntry": {
+      "type": "object",
+      "required": ["version", "basedOn", "changes", "migrations"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "basedOn": {
+          "oneOf": [
+            { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+            { "type": "null" }
+          ]
+        },
+        "changes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Change" }
+        },
+        "migrations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Migration" }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "Change": {
+      "type": "object",
+      "required": ["op", "target"],
+      "properties": {
+        "op": {
+          "enum": [
+            "add-field",
+            "remove-field",
+            "rename-field",
+            "type-change",
+            "add-node",
+            "remove-node",
+            "rename-node"
+          ]
+        },
+        "target": { "$ref": "#/$defs/StableId" },
+        "field": { "type": "string" },
+        "type": { "type": "string" },
+        "required": { "type": "boolean" },
+        "from": { "type": "string" },
+        "to": { "type": "string" }
+      }
+    },
+    "Migration": {
+      "type": "object",
+      "required": ["id", "kind", "steps"],
+      "properties": {
+        "id": { "$ref": "#/$defs/StableId" },
+        "kind": {
+          "enum": ["data", "schema", "process"]
+        },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MigrationStep" }
+        },
+        "validate": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "assert": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "MigrationStep": {
+      "type": "object",
+      "properties": {
+        "backfill": {
+          "type": "object",
+          "properties": {
+            "entity": { "$ref": "#/$defs/StableId" },
+            "set": { "type": "object" }
+          }
+        },
+        "sql": { "type": "string" },
+        "script": { "type": "string" }
+      }
+    },
+    "Tests": {
+      "type": "object",
+      "properties": {
+        "scenarios": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NodeRef" }
+        }
+      }
+    },
+    "Docs": {
+      "type": "object",
+      "properties": {
+        "packs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DocPack" }
+        }
+      }
+    },
+    "DocPack": {
+      "type": "object",
+      "required": ["id", "include"],
+      "properties": {
+        "id": { "$ref": "#/$defs/StableId" },
+        "include": {
+          "type": "object",
+          "properties": {
+            "domain": { "type": "boolean" },
+            "interfaces": { "type": "boolean" },
+            "processes": { "type": "boolean" },
+            "migrations": { "type": "boolean" },
+            "howTo": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "roles": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}

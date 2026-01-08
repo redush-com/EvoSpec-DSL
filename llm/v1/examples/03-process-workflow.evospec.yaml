@@ -1,0 +1,345 @@
+# EvoSpec DSL v1 — Process Workflow Example
+# Demonstrates processes, steps, temporal contracts, and state machines
+
+spec: evospec/v1
+
+project:
+  id: workflow.example
+  name: "Order Workflow Example"
+  versioning:
+    strategy: semver
+    current: "1.0.0"
+    compatibility:
+      data: forward-only
+      api: no-breaking-in-minor
+      processes: instance-pinned
+
+structure:
+  root: NodeRef(system.root)
+
+domain:
+  nodes:
+    # Root System
+    - kind: System
+      id: system.root
+      meta:
+        title: "E-Commerce Order System"
+        description: "Order processing with workflow"
+      spec:
+        goals:
+          - "Process orders through fulfillment workflow"
+          - "Ensure payment before shipping"
+          - "Track order state transitions"
+      children:
+        - NodeRef(mod.orders)
+        - NodeRef(mod.workflow)
+
+    # Orders Module
+    - kind: Module
+      id: mod.orders
+      meta:
+        title: "Orders"
+      spec: {}
+      children:
+        - NodeRef(entity.customer)
+        - NodeRef(entity.order)
+        - NodeRef(entity.order_item)
+        - NodeRef(enum.order_status)
+        - NodeRef(cmd.order.create)
+        - NodeRef(cmd.order.submit)
+        - NodeRef(evt.order.created)
+        - NodeRef(evt.order.submitted)
+
+    # Workflow Module
+    - kind: Module
+      id: mod.workflow
+      meta:
+        title: "Workflow"
+      spec: {}
+      children:
+        - NodeRef(proc.order.fulfillment)
+        - NodeRef(step.validate)
+        - NodeRef(step.reserve_inventory)
+        - NodeRef(step.process_payment)
+        - NodeRef(step.ship)
+        - NodeRef(evt.payment.processed)
+        - NodeRef(evt.order.shipped)
+
+    # Enums
+    - kind: Enum
+      id: enum.order_status
+      spec:
+        values:
+          - "draft"
+          - "submitted"
+          - "validated"
+          - "paid"
+          - "shipped"
+          - "delivered"
+          - "cancelled"
+
+    # Entities
+    - kind: Entity
+      id: entity.customer
+      meta:
+        title: "Customer"
+      spec:
+        fields:
+          id:
+            type: uuid
+            required: true
+          name:
+            type: string
+            required: true
+          email:
+            type: string
+            required: true
+      contracts:
+        - invariant: "name != ''"
+        - invariant: "email != ''"
+
+    - kind: Entity
+      id: entity.order
+      meta:
+        title: "Order"
+      spec:
+        fields:
+          id:
+            type: uuid
+            required: true
+          customerId:
+            type: ref(entity.customer)
+            required: true
+          status:
+            type: enum(OrderStatus)
+            required: true
+            default: "draft"
+          totalCents:
+            type: int
+            required: true
+            default: 0
+          createdAt:
+            type: datetime
+            required: true
+          paidAt:
+            type: datetime
+            required: false
+          shippedAt:
+            type: datetime
+            required: false
+        relations:
+          customer:
+            to: entity.customer
+            type: many-to-one
+          items:
+            to: entity.order_item
+            type: one-to-many
+      contracts:
+        - invariant: "totalCents >= 0"
+          level: hard
+
+    - kind: Entity
+      id: entity.order_item
+      meta:
+        title: "Order Item"
+      spec:
+        fields:
+          id:
+            type: uuid
+            required: true
+          orderId:
+            type: ref(entity.order)
+            required: true
+          productName:
+            type: string
+            required: true
+          quantity:
+            type: int
+            required: true
+          priceCents:
+            type: int
+            required: true
+      contracts:
+        - invariant: "quantity > 0"
+        - invariant: "priceCents >= 0"
+
+    # Commands
+    - kind: Command
+      id: cmd.order.create
+      meta:
+        title: "Create Order"
+      spec:
+        input:
+          customerId: uuid
+        effects:
+          emits:
+            - evt.order.created
+          modifies:
+            - entity.order
+
+    - kind: Command
+      id: cmd.order.submit
+      meta:
+        title: "Submit Order"
+        description: "Submit order for processing"
+      spec:
+        input:
+          orderId: uuid
+        effects:
+          emits:
+            - evt.order.submitted
+          modifies:
+            - entity.order
+
+    # Events
+    - kind: Event
+      id: evt.order.created
+      spec:
+        payload:
+          orderId: uuid
+          customerId: uuid
+          occurredAt: datetime
+
+    - kind: Event
+      id: evt.order.submitted
+      spec:
+        payload:
+          orderId: uuid
+          totalCents: int
+          occurredAt: datetime
+
+    - kind: Event
+      id: evt.payment.processed
+      spec:
+        payload:
+          orderId: uuid
+          amountCents: int
+          occurredAt: datetime
+
+    - kind: Event
+      id: evt.order.shipped
+      spec:
+        payload:
+          orderId: uuid
+          trackingNumber: string
+          occurredAt: datetime
+
+    # Process
+    - kind: Process
+      id: proc.order.fulfillment
+      meta:
+        title: "Order Fulfillment Process"
+        description: "Handles order from submission to delivery"
+      spec:
+        trigger: cmd.order.submit
+        state:
+          vars:
+            orderId: uuid
+            validated: bool
+            inventoryReserved: bool
+            paid: bool
+            shipped: bool
+      children:
+        - NodeRef(step.validate)
+        - NodeRef(step.reserve_inventory)
+        - NodeRef(step.process_payment)
+        - NodeRef(step.ship)
+      contracts:
+        # Temporal constraint: shipping requires payment
+        - temporal: "G(step.ship -> paid)"
+          level: hard
+        # Temporal constraint: payment requires validation
+        - temporal: "G(step.process_payment -> validated)"
+          level: hard
+
+    # Steps
+    - kind: Step
+      id: step.validate
+      meta:
+        title: "Validate Order"
+      spec:
+        action: "ValidateOrder"
+        inputs:
+          orderId: uuid
+        outputs:
+          validated: bool
+          errors: string
+
+    - kind: Step
+      id: step.reserve_inventory
+      meta:
+        title: "Reserve Inventory"
+      spec:
+        action: "ReserveInventory"
+        inputs:
+          orderId: uuid
+        outputs:
+          reserved: bool
+
+    - kind: Step
+      id: step.process_payment
+      meta:
+        title: "Process Payment"
+      spec:
+        action: "ProcessPayment"
+        inputs:
+          orderId: uuid
+          amountCents: int
+        outputs:
+          paid: bool
+          transactionId: string
+
+    - kind: Step
+      id: step.ship
+      meta:
+        title: "Ship Order"
+      spec:
+        action: "CreateShipment"
+        inputs:
+          orderId: uuid
+        outputs:
+          shipped: bool
+          trackingNumber: string
+
+    # Test Scenarios
+    - kind: Scenario
+      id: sc.order.happy_path
+      meta:
+        title: "Order Happy Path"
+        description: "Complete order flow from creation to shipping"
+      spec:
+        given:
+          - seed:
+              entity: entity.customer
+              data:
+                name: "John Doe"
+                email: "john@example.com"
+          - seed:
+              entity: entity.order
+              data:
+                customerId: "$ref(customer).id"
+                status: "draft"
+                totalCents: 5000
+        when:
+          - command:
+              id: cmd.order.submit
+              input:
+                orderId: "$ref(order).id"
+        then:
+          - expectEvent:
+              id: evt.order.submitted
+              match:
+                orderId: "$ref(order).id"
+          - expectEntity:
+              id: entity.order
+              where:
+                id: "$ref(order).id"
+              match:
+                status: "submitted"
+
+history:
+  - version: "1.0.0"
+    basedOn: null
+    changes: []
+    migrations: []
+    notes: "Initial workflow spec"

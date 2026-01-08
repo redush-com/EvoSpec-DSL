@@ -1,0 +1,32 @@
+# EvoSpec DSL v1 — Minimal Example
+# This is the bare minimum valid EvoSpec file
+
+spec: evospec/v1
+
+project:
+  id: minimal.app
+  name: "Minimal Application"
+  versioning:
+    strategy: semver
+    current: "1.0.0"
+
+structure:
+  root: NodeRef(system.root)
+
+domain:
+  nodes:
+    - kind: System
+      id: system.root
+      meta:
+        title: "Minimal System"
+        description: "A minimal EvoSpec example"
+      spec:
+        goals:
+          - "Demonstrate minimal valid EvoSpec structure"
+
+history:
+  - version: "1.0.0"
+    basedOn: null
+    changes: []
+    migrations: []
+    notes: "Initial minimal spec"

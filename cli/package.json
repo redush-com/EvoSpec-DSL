@@ -1,0 +1,46 @@
+{
+  "name": "@evospec/cli",
+  "version": "1.0.0",
+  "description": "CLI for EvoSpec DSL validation and tooling",
+  "bin": {
+    "evospec": "./dist/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs --dts",
+    "dev": "tsup src/index.ts --format cjs --dts --watch",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "evospec",
+    "dsl",
+    "cli",
+    "validator"
+  ],
+  "author": "EvoSpec",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/evospec/evospec-dsl.git",
+    "directory": "cli"
+  },
+  "dependencies": {
+    "@evospec/validator": "workspace:*",
+    "commander": "^12.1.0",
+    "chalk": "^5.4.1",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,219 @@
+# EvoSpec DSL v1 — Entity CRUD Example
+# Demonstrates entities, commands, events, and basic CRUD operations
+
+spec: evospec/v1
+
+project:
+  id: crud.example
+  name: "CRUD Example"
+  versioning:
+    strategy: semver
+    current: "1.0.0"
+    compatibility:
+      data: forward-only
+      api: no-breaking-in-minor
+
+structure:
+  root: NodeRef(system.root)
+
+domain:
+  nodes:
+    # Root System
+    - kind: System
+      id: system.root
+      meta:
+        title: "Task Management System"
+        description: "Simple task management with CRUD operations"
+      spec:
+        goals:
+          - "Manage tasks with full CRUD"
+          - "Track task status changes"
+      children:
+        - NodeRef(mod.tasks)
+
+    # Tasks Module
+    - kind: Module
+      id: mod.tasks
+      meta:
+        title: "Tasks Module"
+      spec: {}
+      children:
+        - NodeRef(entity.task)
+        - NodeRef(enum.task_status)
+        - NodeRef(cmd.task.create)
+        - NodeRef(cmd.task.update)
+        - NodeRef(cmd.task.delete)
+        - NodeRef(cmd.task.complete)
+        - NodeRef(evt.task.created)
+        - NodeRef(evt.task.updated)
+        - NodeRef(evt.task.deleted)
+        - NodeRef(evt.task.completed)
+
+    # Enums
+    - kind: Enum
+      id: enum.task_status
+      meta:
+        title: "Task Status"
+      spec:
+        values:
+          - "pending"
+          - "in_progress"
+          - "completed"
+          - "cancelled"
+
+    # Entities
+    - kind: Entity
+      id: entity.task
+      meta:
+        title: "Task"
+        description: "A task item"
+      spec:
+        fields:
+          id:
+            type: uuid
+            required: true
+          title:
+            type: string
+            required: true
+          description:
+            type: string
+            required: false
+          status:
+            type: enum(TaskStatus)
+            required: true
+            default: "pending"
+          createdAt:
+            type: datetime
+            required: true
+          updatedAt:
+            type: datetime
+            required: false
+      contracts:
+        - invariant: "title != ''"
+          level: hard
+
+    # Commands
+    - kind: Command
+      id: cmd.task.create
+      meta:
+        title: "Create Task"
+      spec:
+        input:
+          title: string
+          description: string
+        effects:
+          emits:
+            - evt.task.created
+          modifies:
+            - entity.task
+
+    - kind: Command
+      id: cmd.task.update
+      meta:
+        title: "Update Task"
+      spec:
+        input:
+          taskId: uuid
+          title: string
+          description: string
+        effects:
+          emits:
+            - evt.task.updated
+          modifies:
+            - entity.task
+
+    - kind: Command
+      id: cmd.task.delete
+      meta:
+        title: "Delete Task"
+      spec:
+        input:
+          taskId: uuid
+        effects:
+          emits:
+            - evt.task.deleted
+          modifies:
+            - entity.task
+
+    - kind: Command
+      id: cmd.task.complete
+      meta:
+        title: "Complete Task"
+      spec:
+        input:
+          taskId: uuid
+        effects:
+          emits:
+            - evt.task.completed
+          modifies:
+            - entity.task
+
+    # Events
+    - kind: Event
+      id: evt.task.created
+      meta:
+        title: "Task Created"
+      spec:
+        payload:
+          taskId: uuid
+          title: string
+          occurredAt: datetime
+
+    - kind: Event
+      id: evt.task.updated
+      meta:
+        title: "Task Updated"
+      spec:
+        payload:
+          taskId: uuid
+          title: string
+          description: string
+          occurredAt: datetime
+
+    - kind: Event
+      id: evt.task.deleted
+      meta:
+        title: "Task Deleted"
+      spec:
+        payload:
+          taskId: uuid
+          occurredAt: datetime
+
+    - kind: Event
+      id: evt.task.completed
+      meta:
+        title: "Task Completed"
+      spec:
+        payload:
+          taskId: uuid
+          occurredAt: datetime
+
+    # Test Scenario
+    - kind: Scenario
+      id: sc.task.create_and_complete
+      meta:
+        title: "Create and Complete Task"
+        description: "Happy path: create a task and mark it complete"
+      spec:
+        given:
+          - seed:
+              entity: entity.task
+              data: {}
+        when:
+          - command:
+              id: cmd.task.create
+              input:
+                title: "Test Task"
+                description: "A test task"
+        then:
+          - expectEvent:
+              id: evt.task.created
+              match:
+                title: "Test Task"
+
+history:
+  - version: "1.0.0"
+    basedOn: null
+    changes: []
+    migrations: []
+    notes: "Initial CRUD spec"

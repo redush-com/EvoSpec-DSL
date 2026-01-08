@@ -1,0 +1,37 @@
+{
+  "name": "evospec-dsl",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EvoSpec DSL - Specification-driven software evolution",
+  "workspaces": [
+    "validator",
+    "cli",
+    "website"
+  ],
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r dev",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "docs:dev": "pnpm --filter evospec-docs start",
+    "docs:build": "pnpm --filter evospec-docs build"
+  },
+  "keywords": [
+    "evospec",
+    "dsl",
+    "specification",
+    "llm",
+    "code-generation",
+    "evolution"
+  ],
+  "author": "EvoSpec",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/evospec/evospec-dsl.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
