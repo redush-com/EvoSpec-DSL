@@ -3,10 +3,10 @@
  * Loads config from global (~/.evospec/config.yaml) and local (.evospec/config.yaml)
  */
 
-import { existsSync, readFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { EvoSpecConfig, ProjectLocalConfig, LLMProviderName, LLMConfig, VersioningConfig } from './schema.js';
 import { DEFAULT_CONFIG, ENV_KEYS } from './defaults.js';
 
@@ -194,4 +194,42 @@ export function findSpecFile(cwd: string = process.cwd()): string | null {
   }
   
   return null;
+}
+
+/**
+ * Save API key to global config (~/.evospec/config.yaml)
+ */
+export function saveApiKey(provider: LLMProviderName, apiKey: string): void {
+  // Ensure global config directory exists
+  if (!existsSync(GLOBAL_CONFIG_DIR)) {
+    mkdirSync(GLOBAL_CONFIG_DIR, { recursive: true });
+  }
+  
+  // Load existing config or create new one
+  let globalConfig = loadYamlFile<Record<string, unknown>>(GLOBAL_CONFIG_FILE) ?? {};
+  
+  // Ensure providers structure exists
+  if (!globalConfig.providers || typeof globalConfig.providers !== 'object') {
+    globalConfig.providers = {};
+  }
+  
+  const providers = globalConfig.providers as Record<string, Record<string, string>>;
+  
+  // Set the API key for the provider
+  if (!providers[provider]) {
+    providers[provider] = {};
+  }
+  providers[provider].apiKey = apiKey;
+  
+  // Write back to file
+  const yamlContent = stringifyYaml(globalConfig, { indent: 2 });
+  writeFileSync(GLOBAL_CONFIG_FILE, yamlContent, 'utf-8');
+}
+
+/**
+ * Check if API key is configured for a provider
+ */
+export function hasApiKey(provider: LLMProviderName, config: EvoSpecConfig): boolean {
+  const apiKey = getApiKey(provider, config);
+  return apiKey !== undefined && apiKey.length > 0;
 }

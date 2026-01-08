@@ -9,6 +9,7 @@ import { resolve } from 'path';
 import chalk from 'chalk';
 import ora from 'ora';
 import { loadConfig, findSpecFile } from '../config/loader.js';
+import { ensureApiKey } from '../config/setup.js';
 import { evolveSpec } from '../generation/engine.js';
 import { createGit, isGitAvailable } from '../versioning/git.js';
 import type { LLMProviderName } from '../config/schema.js';
@@ -53,7 +54,17 @@ export function createEvolveCommand(): Command {
           process.exit(1);
         }
         
-        const config = loadConfig();
+        let config = loadConfig();
+        const provider = options.provider as LLMProviderName | undefined ?? config.llm.provider;
+        
+        // Ensure API key is configured
+        const setupResult = await ensureApiKey(config, provider);
+        config = setupResult.config;
+        
+        if (setupResult.cancelled) {
+          console.log(chalk.red('API key required for evolution.'));
+          process.exit(1);
+        }
         
         if (options.verbose) {
           spinner.start('Evolving specification...');

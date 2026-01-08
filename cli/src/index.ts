@@ -5,14 +5,29 @@
  * Command-line interface for EvoSpec DSL validation, generation, and versioning
  */
 
-// Load environment variables from .env file
-import 'dotenv/config';
+// Load environment variables from .env file in current directory, project root, or home directory
+import { config as dotenvConfig } from 'dotenv';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { homedir } from 'os';
+import { resolve, basename, join } from 'path';
+
+// Try loading .env from multiple locations (in order of priority)
+const envPaths = [
+  resolve(process.cwd(), '.env'),                    // Current directory
+  resolve(process.cwd(), '.evospec', '.env'),        // Project .evospec folder
+  join(homedir(), '.evospec', '.env'),               // Global ~/.evospec/.env
+];
+
+for (const envPath of envPaths) {
+  if (existsSync(envPath)) {
+    dotenvConfig({ path: envPath });
+    break;
+  }
+}
 
 import { Command } from 'commander';
-import { readFileSync, existsSync, writeFileSync } from 'fs';
-import { resolve, basename } from 'path';
 import chalk from 'chalk';
-import { validate, validateYaml, ValidationResult, ValidationError, ValidationPhase } from '@evospec/validator';
+import { validateYaml, ValidationResult, ValidationError, ValidationPhase } from '@evospec/validator';
 
 // Import new commands
 import {

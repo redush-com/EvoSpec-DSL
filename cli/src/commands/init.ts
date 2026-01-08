@@ -9,6 +9,8 @@ import ora from 'ora';
 import inquirer from 'inquirer';
 import { initProject, type InitOptions } from '../project/init.js';
 import type { LLMProviderName } from '../config/schema.js';
+import { loadConfig } from '../config/loader.js';
+import { ensureApiKey } from '../config/setup.js';
 
 export function createInitCommand(): Command {
   const cmd = new Command('init')
@@ -67,6 +69,20 @@ export function createInitCommand(): Command {
           }
           
           console.log();
+        }
+        
+        // Check API key if LLM generation is requested
+        let config = loadConfig();
+        const provider = options.provider as LLMProviderName | undefined ?? config.llm.provider;
+        
+        if (options.description && options.generate) {
+          const result = await ensureApiKey(config, provider);
+          config = result.config;
+          
+          if (result.cancelled) {
+            console.log(chalk.yellow('Continuing without LLM generation...'));
+            options.generate = false;
+          }
         }
         
         console.log(chalk.bold('Creating project...'));
